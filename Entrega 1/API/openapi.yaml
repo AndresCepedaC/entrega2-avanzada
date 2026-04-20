@@ -1,0 +1,721 @@
+openapi: 3.0.3
+info:
+  title: Sistema Integral de Gestión de Solicitudes Académicas
+  description: |
+    API para el registro, clasificación, priorización y seguimiento de solicitudes
+    administrativas y académicas. Basado en el diagrama de estados de SolicitudAcademica
+    y el modelo de dominio UML.
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+    description: API principal
+
+tags:
+  - name: Solicitudes
+    description: Gestión del ciclo de vida de la solicitud (estados y transiciones)
+  - name: Seguimiento
+    description: Registro de eventos y trazabilidad
+  - name: Asignaciones
+    description: Asignación de gestores a solicitudes
+  - name: Identidad
+    description: Cuentas de usuario y perfiles
+  - name: Decisiones
+    description: Reglas de clasificación y políticas de prioridad
+
+paths:
+  # --- Solicitudes (entidad principal, diagrama de estados) ---
+  /solicitudes:
+    get:
+      tags: [Solicitudes]
+      summary: Listar solicitudes
+      parameters:
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoSolicitud'
+        - name: prioridad
+          in: query
+          schema:
+            $ref: '#/components/schemas/NivelPrioridad'
+      responses:
+        '200':
+          description: Lista de solicitudes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SolicitudAcademica'
+    post:
+      tags: [Solicitudes]
+      summary: crearSolicitud — Crea una solicitud (estado inicial REGISTRADA)
+      description: Transición [*] → REGISTRADA. Registra información básica.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudAcademicaCrear'
+      responses:
+        '201':
+          description: Solicitud creada en estado REGISTRADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+
+  /solicitudes/{id}:
+    get:
+      tags: [Solicitudes]
+      summary: Obtener solicitud por ID
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      responses:
+        '200':
+          description: Solicitud encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '404':
+          description: Solicitud no encontrada
+
+    # Transiciones de estado (según diagrama de estados)
+  /solicitudes/{id}/clasificar:
+    post:
+      tags: [Solicitudes]
+      summary: clasificar — REGISTRADA → CLASIFICADA
+      description: Define categoría y nivel de prioridad. Estado listo para asignación.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClasificacionInput'
+      responses:
+        '200':
+          description: Solicitud clasificada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está en estado REGISTRADA
+
+  /solicitudes/{id}/cancelar:
+    post:
+      tags: [Solicitudes]
+      summary: cancelar — REGISTRADA | EN_ATENCION → CANCELADA (terminal)
+      description: Cancelado por el solicitante. Estado inmutable.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comentario:
+                  type: string
+                  description: Justificación del cierre (RegistroSeguimiento)
+      responses:
+        '200':
+          description: Solicitud cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no permite cancelación (estado terminal o no válido)
+
+  /solicitudes/{id}/asignar-gestor:
+    post:
+      tags: [Solicitudes, Asignaciones]
+      summary: asignarGestor — CLASIFICADA → EN_ATENCION
+      description: Solo solicitudes clasificadas pueden asignarse. Una asignación activa por solicitud.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gestorId]
+              properties:
+                gestorId:
+                  type: string
+                  format: uuid
+                  description: ID de CuentaUsuario (gestor)
+      responses:
+        '200':
+          description: Gestor asignado, solicitud en EN_ATENCION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está CLASIFICADA o gestor no activo
+
+  /solicitudes/{id}/rechazar:
+    post:
+      tags: [Solicitudes]
+      summary: rechazar — CLASIFICADA → RECHAZADA (terminal)
+      description: Solicitud inválida o fuera de alcance. Estado inmutable.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comentario]
+              properties:
+                comentario:
+                  type: string
+      responses:
+        '200':
+          description: Solicitud rechazada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está en CLASIFICADA
+
+  /solicitudes/{id}/registrar-solucion:
+    post:
+      tags: [Solicitudes]
+      summary: registrarSolucion — EN_ATENCION → ATENDIDA
+      description: El gestor registra la solución. Pendiente de validación y cierre.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comentario]
+              properties:
+                comentario:
+                  type: string
+                descripcionSolucion:
+                  type: string
+      responses:
+        '200':
+          description: Solución registrada, solicitud ATENDIDA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está en EN_ATENCION
+
+  /solicitudes/{id}/reclasificar:
+    post:
+      tags: [Solicitudes]
+      summary: reclasificar — EN_ATENCION → CLASIFICADA
+      description: Cambio de categoría o prioridad desde estado operativo.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClasificacionInput'
+      responses:
+        '200':
+          description: Solicitud reclasificada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está en EN_ATENCION
+
+  /solicitudes/{id}/cerrar:
+    post:
+      tags: [Solicitudes]
+      summary: cerrarSolicitud — ATENDIDA → CERRADA (terminal)
+      description: Cierre formal. Estado inmutable. Requiere justificación.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [justificacion]
+              properties:
+                justificacion:
+                  type: string
+      responses:
+        '200':
+          description: Solicitud cerrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está en ATENDIDA
+
+  /solicitudes/{id}/reabrir:
+    post:
+      tags: [Solicitudes]
+      summary: reabrir — ATENDIDA → EN_ATENCION
+      description: Reapertura si la solución no es aceptada.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comentario]
+              properties:
+                comentario:
+                  type: string
+      responses:
+        '200':
+          description: Solicitud reabierta, vuelve a EN_ATENCION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+        '400':
+          description: Solicitud no está en ATENDIDA
+
+  # --- RegistroSeguimiento (trazabilidad, UML) ---
+  /solicitudes/{id}/seguimientos:
+    get:
+      tags: [Seguimiento]
+      summary: Historial de seguimiento de la solicitud (1:N)
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      responses:
+        '200':
+          description: Lista de RegistroSeguimiento
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegistroSeguimiento'
+    post:
+      tags: [Seguimiento]
+      summary: Añadir registro de seguimiento (cada transición lo genera)
+      description: |
+        El autor del seguimiento se extrae automáticamente del token JWT de la sesión activa.
+        No se permite enviar el ID del autor en el cuerpo de la petición para evitar suplantación.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroSeguimientoCrear'
+      responses:
+        '201':
+          description: Registro creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroSeguimiento'
+
+  # --- AsignacionGestor (UML) ---
+  /solicitudes/{id}/asignaciones:
+    get:
+      tags: [Asignaciones]
+      summary: Historial de asignaciones de la solicitud (1:N, una activa)
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      responses:
+        '200':
+          description: Lista de AsignacionGestor
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AsignacionGestor'
+
+  # --- Identidad (CuentaUsuario, Perfil — UML) ---
+  /usuarios:
+    get:
+      tags: [Identidad]
+      summary: Listar cuentas de usuario
+      parameters:
+        - name: activo
+          in: query
+          schema:
+            type: boolean
+        - name: tipoPerfil
+          in: query
+          schema:
+            $ref: '#/components/schemas/TipoPerfil'
+      responses:
+        '200':
+          description: Lista de CuentaUsuario
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CuentaUsuario'
+    post:
+      tags: [Identidad]
+      summary: Crear cuenta de usuario
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CuentaUsuarioCrear'
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaUsuario'
+
+  /usuarios/{id}:
+    get:
+      tags: [Identidad]
+      summary: Obtener usuario por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CuentaUsuario con Perfil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaUsuario'
+    patch:
+      tags: [Identidad]
+      summary: Activar/desactivar cuenta o actualizar perfil
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                activo:
+                  type: boolean
+                perfilId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentaUsuario'
+
+  # --- Motor de Decisiones (UML) ---
+  /reglas-clasificacion:
+    get:
+      tags: [Decisiones]
+      summary: Listar reglas de clasificación activas
+      responses:
+        '200':
+          description: Lista de ReglaClasificacion
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReglaClasificacion'
+  /politicas-prioridad:
+    get:
+      tags: [Decisiones]
+      summary: Listar políticas de prioridad
+      responses:
+        '200':
+          description: Lista de PoliticaPrioridad
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PoliticaPrioridad'
+
+  /solicitudes/{id}/recalcular-prioridad:
+    post:
+      tags: [Solicitudes, Decisiones]
+      summary: Recalcular prioridad según políticas activas
+      parameters:
+        - $ref: '#/components/parameters/SolicitudId'
+      responses:
+        '200':
+          description: Prioridad recalculada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAcademica'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SolicitudId:
+      name: id
+      in: path
+      required: true
+      description: Identificador de la solicitud
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # --- Enumeraciones (diagrama de estados + UML) ---
+    EstadoSolicitud:
+      type: string
+      enum:
+        - REGISTRADA
+        - CLASIFICADA
+        - EN_ATENCION
+        - ATENDIDA
+        - CERRADA
+        - RECHAZADA
+        - CANCELADA
+      description: |
+        Ciclo de vida de la solicitud. Terminales: CERRADA, RECHAZADA, CANCELADA.
+        Happy path: REGISTRADA → CLASIFICADA → EN_ATENCION → ATENDIDA → CERRADA.
+
+    NivelPrioridad:
+      type: string
+      enum:
+        - BAJA
+        - MEDIA
+        - ALTA
+        - URGENTE
+
+    CategoriaSolicitud:
+      type: string
+      enum:
+        - ACADEMICO
+        - ADMINISTRATIVO
+        - FINANCIERO
+        - OTRO
+
+    MedioIngreso:
+      type: string
+      enum:
+        - WEB
+        - PRESENCIAL
+        - CORREO
+        - TELEFONO
+
+    TipoPerfil:
+      type: string
+      enum:
+        - SOLICITANTE
+        - GESTOR
+        - ADMINISTRADOR
+        - SUPERVISOR
+
+    # --- Entidad principal (UML) ---
+    SolicitudAcademica:
+      type: object
+      required:
+        - id
+        - descripcion
+        - estado
+        - fechaCreacion
+      properties:
+        id:
+          type: string
+          format: uuid
+        descripcion:
+          type: string
+        estado:
+          $ref: '#/components/schemas/EstadoSolicitud'
+        nivelPrioridad:
+          $ref: '#/components/schemas/NivelPrioridad'
+        categoria:
+          $ref: '#/components/schemas/CategoriaSolicitud'
+        medioIngreso:
+          $ref: '#/components/schemas/MedioIngreso'
+        fechaCreacion:
+          type: string
+          format: date-time
+        fechaActualizacion:
+          type: string
+          format: date-time
+        solicitanteId:
+          type: string
+          format: uuid
+        asignacionActivaId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Solo una asignación activa por solicitud
+
+    SolicitudAcademicaCrear:
+      type: object
+      required:
+        - descripcion
+      properties:
+        descripcion:
+          type: string
+        medioIngreso:
+          $ref: '#/components/schemas/MedioIngreso'
+        solicitanteId:
+          type: string
+          format: uuid
+
+    ClasificacionInput:
+      type: object
+      required:
+        - categoria
+        - nivelPrioridad
+      properties:
+        categoria:
+          $ref: '#/components/schemas/CategoriaSolicitud'
+        nivelPrioridad:
+          $ref: '#/components/schemas/NivelPrioridad'
+
+    # --- RegistroSeguimiento (UML, trazabilidad) ---
+    RegistroSeguimiento:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        solicitudId:
+          type: string
+          format: uuid
+        fecha:
+          type: string
+          format: date-time
+        comentario:
+          type: string
+        usuarioId:
+          type: string
+          format: uuid
+
+    RegistroSeguimientoCrear:
+      type: object
+      required:
+        - comentario
+      properties:
+        comentario:
+          type: string
+
+    # --- AsignacionGestor (UML) ---
+    AsignacionGestor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        solicitudId:
+          type: string
+          format: uuid
+        gestorId:
+          type: string
+          format: uuid
+        fechaAsignacion:
+          type: string
+          format: date-time
+        activa:
+          type: boolean
+          description: Solo una asignación activa por caso
+
+    # --- Identidad (UML) ---
+    CuentaUsuario:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          description: Correo institucional
+        activo:
+          type: boolean
+        fechaCreacion:
+          type: string
+          format: date-time
+        perfil:
+          $ref: '#/components/schemas/Perfil'
+
+    CuentaUsuarioCrear:
+      type: object
+      required:
+        - email
+        - perfilId
+      properties:
+        email:
+          type: string
+          format: email
+        perfilId:
+          type: string
+          format: uuid
+
+    Perfil:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipoPerfil:
+          $ref: '#/components/schemas/TipoPerfil'
+        nombre:
+          type: string
+
+    # --- Motor de Decisiones (UML) ---
+    ReglaClasificacion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        activa:
+          type: boolean
+        condicion:
+          type: string
+          description: Expresión o referencia a condición sobre la solicitud
+
+    PoliticaPrioridad:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        activa:
+          type: boolean
+        nivelResultante:
+          $ref: '#/components/schemas/NivelPrioridad'

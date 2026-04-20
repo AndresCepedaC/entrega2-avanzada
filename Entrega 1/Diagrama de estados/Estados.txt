@@ -1,0 +1,172 @@
+Sistema de Gestión de Casos Académicos
+📌 1. Propósito
+
+Este documento describe el modelo de estados del objeto principal CasoAcademico, el cual controla el ciclo de vida completo de un caso desde su creación hasta su finalización.
+
+El modelo fue diseñado con enfoque en:
+
+Coherencia del flujo de negocio
+
+Simplicidad estructural
+
+Trazabilidad obligatoria
+
+Estados terminales inmutables
+
+Separación clara entre acciones y transiciones
+
+🧭 2. Flujo General del Caso
+
+El caso inicia en estado:
+
+INICIADO
+
+Y puede finalizar en uno de los siguientes estados terminales:
+
+FINALIZADO
+
+RECHAZADO
+
+CANCELADO
+
+Todos los estados finales son de solo lectura y no permiten nuevas transiciones.
+
+📂 3. Inventario de Estados
+🟢 INICIADO
+
+Caso creado correctamente.
+
+Información básica registrada.
+
+Aún no ha sido clasificado.
+
+🔵 CLASIFICADO
+
+Se definió categoría.
+
+Se asignó nivel de prioridad.
+
+Está listo para asignación.
+
+🟠 EN_PROCESO
+
+Tiene gestor asignado.
+
+Se encuentra en análisis o ejecución.
+
+Estado operativo principal.
+
+Puede:
+
+Reclasificarse
+
+Cancelarse
+
+Marcarse como resuelto
+
+🟣 RESUELTO
+
+El gestor registró solución.
+
+Pendiente de validación y cierre formal.
+
+Puede:
+
+Cerrarse definitivamente
+
+Reabrirse si la solución no es aceptada
+
+🔴 FINALIZADO (Terminal)
+
+Caso cerrado exitosamente.
+
+No admite modificaciones.
+
+Estado inmutable.
+
+⚫ RECHAZADO (Terminal)
+
+Caso inválido o fuera de alcance.
+
+No continúa en el flujo.
+
+Inmutable.
+
+🚫 CANCELADO (Terminal)
+
+Cancelado por el solicitante.
+
+No se procesa más.
+
+Inmutable.
+
+🔄 4. Matriz Simplificada de Transiciones
+Estado Origen	Acción	Estado Destino
+[*]	crearCaso()	INICIADO
+INICIADO	clasificar()	CLASIFICADO
+INICIADO	cancelar()	CANCELADO
+CLASIFICADO	asignarGestor()	EN_PROCESO
+CLASIFICADO	rechazar()	RECHAZADO
+EN_PROCESO	registrarSolucion()	RESUELTO
+EN_PROCESO	reclasificar()	CLASIFICADO
+EN_PROCESO	cancelar()	CANCELADO
+RESUELTO	cerrarCaso()	FINALIZADO
+RESUELTO	reabrir()	EN_PROCESO
+🔐 5. Reglas de Consistencia
+
+Un caso no puede finalizar si no ha sido resuelto previamente.
+
+Solo casos clasificados pueden asignarse.
+
+Solo casos en proceso pueden resolverse.
+
+Estados terminales bloquean nuevas acciones.
+
+Cada transición debe generar un RegistroSeguimiento obligatorio.
+
+📊 6. Camino Principal (Happy Path)
+
+INICIADO
+→ CLASIFICADO
+→ EN_PROCESO
+→ RESUELTO
+→ FINALIZADO
+
+Este flujo representa el escenario ideal sin errores ni interrupciones.
+
+⚠️ 7. Flujos Alternativos
+Cancelación temprana
+
+INICIADO → CANCELADO
+
+Rechazo por clasificación inválida
+
+CLASIFICADO → RECHAZADO
+
+Reapertura por inconformidad
+
+RESUELTO → EN_PROCESO
+
+🛡 8. Garantías del Modelo
+
+✔ Control formal del ciclo de vida
+✔ Prevención de corrupción de estado
+✔ Estados finales protegidos
+✔ Trazabilidad obligatoria
+✔ Reapertura controlada
+✔ Flujo comprensible y mantenible
+
+🎯 9. Justificación del Diseño
+
+El modelo prioriza claridad y mantenibilidad sobre complejidad técnica innecesaria.
+Las transiciones están alineadas con las responsabilidades definidas en la entidad CasoAcademico.
+
+Este enfoque:
+
+Reduce ambigüedad
+
+Facilita implementación en Spring Boot
+
+Permite validaciones explícitas
+
+Es coherente con el modelo de dominio previamente definido

@@ -1,0 +1,239 @@
+Sistema Integral de Gestión de Solicitudes Académicas
+1. Visión General
+
+El Sistema Integral de Gestión de Solicitudes Académicas es una solución orientada al registro, clasificación, priorización y seguimiento de solicitudes administrativas y académicas dentro de una institución universitaria.
+
+El modelo ha sido estructurado bajo principios de:
+
+Diseño orientado al dominio (Domain-Driven Design)
+
+Separación por contextos funcionales
+
+Centralización de reglas en el dominio
+
+Trazabilidad obligatoria
+
+Flexibilidad en reglas de decisión
+
+El núcleo del sistema está representado por la entidad SolicitudAcademica, que actúa como entidad central del dominio y coordina las operaciones críticas del negocio.
+
+2. Organización del Dominio
+
+El modelo se divide en tres áreas principales:
+
+2.1 Identidad y Autorización
+
+Este módulo administra los usuarios que interactúan con el sistema.
+
+Entidades
+
+CuentaUsuario
+
+Perfil
+
+TipoPerfil (Enumeración)
+
+Responsabilidades
+
+Gestionar activación y desactivación de cuentas.
+
+Asociar cada usuario a un perfil institucional.
+
+Controlar permisos según tipo de perfil.
+
+Registrar fecha de creación de la cuenta.
+
+Cada CuentaUsuario posee exactamente un Perfil, el cual determina su rol funcional dentro del sistema.
+
+2.2 Gestión de Solicitudes
+
+Este módulo representa el corazón del sistema.
+
+Entidad Principal
+
+SolicitudAcademica
+
+Entidades Relacionadas
+
+RegistroSeguimiento
+
+AsignacionGestor
+
+Enumeraciones asociadas
+
+EstadoSolicitud
+
+NivelPrioridad
+
+CategoriaSolicitud
+
+MedioIngreso
+
+Responsabilidades de SolicitudAcademica
+
+SolicitudAcademica coordina:
+
+Registro de la solicitud.
+
+Cambio de estado.
+
+Asignación de gestor.
+
+Recalculo de prioridad.
+
+Cierre de la solicitud con justificación.
+
+Además, mantiene:
+
+Historial completo de eventos.
+
+Registro de asignaciones activas e históricas.
+
+Estado actual del flujo de la solicitud.
+
+Nivel de prioridad vigente.
+
+2.3 Motor de Decisiones
+
+Este módulo encapsula la lógica de evaluación dinámica.
+
+Componentes
+
+ReglaClasificacion
+
+PoliticaPrioridad
+
+Funciones
+
+Evaluar condiciones sobre una solicitud.
+
+Determinar nivel de prioridad según reglas configurables.
+
+Permitir activación o desactivación de reglas sin alterar el núcleo del dominio.
+
+Este enfoque desacopla la lógica de decisión del modelo principal, facilitando futuras modificaciones.
+
+3. Ciclo de Vida de la Solicitud
+
+El flujo de estados de SolicitudAcademica está definido por la enumeración EstadoSolicitud:
+
+REGISTRADA
+
+CLASIFICADA
+
+EN_ATENCION
+
+ATENDIDA
+
+CERRADA
+
+RECHAZADA
+
+Reglas generales
+
+No se puede cerrar una solicitud sin haber sido atendida.
+
+Los estados finales bloquean modificaciones posteriores.
+
+Cada transición debe generar un RegistroSeguimiento.
+
+El sistema mantiene coherencia entre estado y prioridad.
+
+4. Relaciones del Modelo
+
+SolicitudAcademica – RegistroSeguimiento
+
+Relación uno a muchos.
+
+Garantiza trazabilidad completa.
+
+Cada evento queda documentado con fecha y comentario.
+
+SolicitudAcademica – AsignacionGestor
+
+Relación uno a muchos.
+
+Permite mantener historial de responsables.
+
+Solo una asignación puede estar activa simultáneamente.
+
+AsignacionGestor – CuentaUsuario
+
+Relación muchos a uno.
+
+Un usuario puede gestionar múltiples solicitudes.
+
+CuentaUsuario – Perfil
+
+Relación uno a uno.
+
+Determina el rol institucional.
+
+Motor de Decisiones – SolicitudAcademica
+
+Asociación funcional.
+
+Las reglas consultan el estado de la solicitud sin modificarlo directamente.
+
+5. Reglas de Negocio Fundamentales
+
+Toda solicitud debe:
+
+Tener descripción válida.
+
+Poseer un estado inicial.
+
+Registrar al menos un seguimiento.
+
+Solo usuarios activos pueden:
+
+Ser asignados como gestores.
+
+Ejecutar acciones sobre solicitudes.
+
+La prioridad puede recalcularse en cualquier momento mediante políticas activas.
+
+Las reglas de clasificación no alteran el estado automáticamente; deben ser aplicadas explícitamente.
+
+Una solicitud cerrada no puede ser reactivada sin proceso formal.
+
+6. Consistencia del Modelo
+
+El diseño asegura:
+
+Encapsulamiento de reglas dentro de la entidad principal.
+
+Separación clara entre reglas de negocio y datos.
+
+Bajo acoplamiento entre módulos.
+
+Preparación para control de concurrencia optimista en la implementación.
+
+El enfoque permite que todas las modificaciones relevantes pasen por SolicitudAcademica, garantizando coherencia interna.
+
+7. Validaciones del Dominio
+
+El modelo contempla restricciones como:
+
+Correos institucionales válidos.
+
+Estados definidos mediante enumeraciones.
+
+Prioridades limitadas a valores predefinidos.
+
+Fechas coherentes (creación ≤ actualización).
+
+Asignaciones activas únicas por solicitud.
+
+Estas validaciones fortalecen la integridad antes de la persistencia.
+
+8. Estructura Recomendada del Proyecto
+
+domain/
+ ├── identidad/
+ ├── gestionsolicitudes/
+ ├── decisiones/
+
+application/
+infrastructure/
+interfaces/

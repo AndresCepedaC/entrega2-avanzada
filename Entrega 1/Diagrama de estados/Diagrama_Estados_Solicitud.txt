@@ -1,0 +1,172 @@
+Sistema de Gestión de Solicitudes Académicas
+📌 1. Propósito
+
+Este documento describe el modelo de estados del objeto principal SolicitudAcademica, el cual controla el ciclo de vida completo de una solicitud desde su creación hasta su finalización.
+
+El modelo fue diseñado con enfoque en:
+
+Coherencia del flujo de negocio
+
+Simplicidad estructural
+
+Trazabilidad obligatoria
+
+Estados terminales inmutables
+
+Separación clara entre acciones y transiciones
+
+🧭 2. Flujo General de la Solicitud
+
+La solicitud inicia en estado:
+
+REGISTRADA
+
+Y puede finalizar en uno de los siguientes estados terminales:
+
+CERRADA
+
+RECHAZADA
+
+CANCELADA
+
+Todos los estados finales son de solo lectura y no permiten nuevas transiciones.
+
+📂 3. Inventario de Estados
+🟢 REGISTRADA
+
+Solicitud creada correctamente.
+
+Información básica registrada.
+
+Aún no ha sido clasificada.
+
+🔵 CLASIFICADA
+
+Se definió categoría.
+
+Se asignó nivel de prioridad.
+
+Está listo para asignación.
+
+🟠 EN_ATENCION
+
+Tiene gestor asignado.
+
+Se encuentra en análisis o ejecución.
+
+Estado operativo principal.
+
+Puede:
+
+Reclasificarse
+
+Cancelarse
+
+Marcarse como atendida
+
+🟣 ATENDIDA
+
+El gestor registró solución.
+
+Pendiente de validación y cierre formal.
+
+Puede:
+
+Cerrarse definitivamente
+
+Reabrirse si la solución no es aceptada
+
+🔴 CERRADA (Terminal)
+
+Solicitud cerrada exitosamente.
+
+No admite modificaciones.
+
+Estado inmutable.
+
+⚫ RECHAZADA (Terminal)
+
+Solicitud inválida o fuera de alcance.
+
+No continúa en el flujo.
+
+Inmutable.
+
+🚫 CANCELADA (Terminal)
+
+Cancelada por el solicitante.
+
+No se procesa más.
+
+Inmutable.
+
+🔄 4. Matriz Simplificada de Transiciones
+Estado Origen	Acción	Estado Destino
+[*]	crearSolicitud()	REGISTRADA
+REGISTRADA	clasificar()	CLASIFICADA
+REGISTRADA	cancelar()	CANCELADA
+CLASIFICADA	asignarGestor()	EN_ATENCION
+CLASIFICADA	rechazar()	RECHAZADA
+EN_ATENCION	registrarSolucion()	ATENDIDA
+EN_ATENCION	reclasificar()	CLASIFICADA
+EN_ATENCION	cancelar()	CANCELADA
+ATENDIDA	cerrarSolicitud()	CERRADA
+ATENDIDA	reabrir()	EN_ATENCION
+🔐 5. Reglas de Consistencia
+
+Una solicitud no puede cerrarse si no ha sido atendida previamente.
+
+Solo solicitudes clasificadas pueden asignarse.
+
+Solo solicitudes en atención pueden atenderse.
+
+Estados terminales bloquean nuevas acciones.
+
+Cada transición debe generar un RegistroSeguimiento obligatorio.
+
+📊 6. Camino Principal (Happy Path)
+
+REGISTRADA
+→ CLASIFICADA
+→ EN_ATENCION
+→ ATENDIDA
+→ CERRADA
+
+Este flujo representa el escenario ideal sin errores ni interrupciones.
+
+⚠️ 7. Flujos Alternativos
+Cancelación temprana
+
+REGISTRADA → CANCELADA
+
+Rechazo por clasificación inválida
+
+CLASIFICADA → RECHAZADA
+
+Reapertura por inconformidad
+
+ATENDIDA → EN_ATENCION
+
+🛡 8. Garantías del Modelo
+
+✔ Control formal del ciclo de vida
+✔ Prevención de corrupción de estado
+✔ Estados finales protegidos
+✔ Trazabilidad obligatoria
+✔ Reapertura controlada
+✔ Flujo comprensible y mantenible
+
+🎯 9. Justificación del Diseño
+
+El modelo prioriza claridad y mantenibilidad sobre complejidad técnica innecesaria.
+Las transiciones están alineadas con las responsabilidades definidas en la entidad SolicitudAcademica.
+
+Este enfoque:
+
+Reduce ambigüedad
+
+Facilita implementación en Spring Boot
+
+Permite validaciones explícitas
+
+Es coherente con el modelo de dominio previamente definido
